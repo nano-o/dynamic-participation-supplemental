@@ -1,0 +1,12 @@
+--------------------------------- MODULE CA_MC ---------------------------------
+
+EXTENDS CA
+
+CONSTANTS v1, v2, v3, p1, p2, p3, p4
+
+\* Checking the safety properties of the model took about one hour on a 2022 desktop computer.
+\* To speed things up, make the sets smaller (e.g. 3 processors and 2 values)
+P_MC == {p1, p2, p3, p4}
+V_MC == {v1, v2, v3}
+
+===============================================================================
