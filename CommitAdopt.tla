@@ -1,13 +1,18 @@
---------------------------------- MODULE CA ---------------------------------
+--------------------------------- MODULE CommitAdopt ---------------------------------
 
 (***********************************************************************************)
-(* This is a specification of the commit-adopt algorithm of Gafni and Losa in the  *)
-(* message-adversary model with dynamic participation. The specification is        *)
-(* written in PlusCal and TLA+.                                                    *)
+(* This is a specification of the commit-adopt algorithm of `^Gafni^' and `^Losa^' *)
+(* in the message-adversary model with dynamic participation. The specification is *)
+(* written in `^PlusCal^' and TLA+.                                                *)
 (*                                                                                 *)
-(* Note that, to check this specification with the TLC model-checker, you must     *)
-(* first translate the PlusCal algorithm to TLA+ using the TLA toolbox or the TLA+ *)
-(* VSCode extension.                                                               *)
+(* The message-adversary model with dynamic participation is like the sleepy       *)
+(* model, except that processes never fail; instead, the adversary corrupts their  *)
+(* messages. This has the same effect as processes being faulty but is cleaner to  *)
+(* model.                                                                          *)
+(*                                                                                 *)
+(* Note that, to check this specification with the `^TLC^' model-checker, you must *)
+(* first translate the `^PlusCal^' algorithm to TLA+ using the TLA toolbox or the  *)
+(* TLA+ `^VSCode^' extension.                                                      *)
 (***********************************************************************************)
 
 EXTENDS Naturals, FiniteSets
@@ -32,13 +37,16 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
       participating = [r \in {1,2} |-> {}]; \* the set of participating processors in round r
       corrupted = [r \in {1,2} |-> {}]; \* the set of corrupted processors in round r
     define {
-        \* first we make some auxiliary definitions:
-        HeardOf(rcvd) == {p \in P : rcvd[p] # Bot} \* the set of processors from which p received a message
-        Minority(S) == {M \in SUBSET S : 2*Cardinality(M)<Cardinality(S)} \* the set of minority subsets of S
+        \* first we make some auxiliary definitions
+        \* the set of processors from which p received a message:
+        HeardOf(rcvd) == {p \in P : rcvd[p] # Bot} 
+        \* the set of minority subsets of S:
+        Minority(S) == {M \in SUBSET S : 2*Cardinality(M)<Cardinality(S)} 
         VoteCount(rcvd, v) == Cardinality({p \in P : rcvd[p] = v})
         VotedByMajority(rcvd) == {v \in V : 2*VoteCount(rcvd, v) > Cardinality(HeardOf(rcvd))}
         MostVotedFor(rcvd) == {v \in V : \A w \in V \ {v} : VoteCount(rcvd, v) >= VoteCount(rcvd, w)}
-        Pc(r) == CASE r = 1 -> "r1" \* for technical reasons, we need the program counter of a processor in round r
+        \* for technical reasons, we need the program counter of a processor in round r:
+        Pc(r) == CASE r = 1 -> "r1" 
                 [] r = 2 -> "r2"
                 [] r = 3 -> "r3"
         \* Now the two safety properties:
@@ -108,8 +116,14 @@ adv:    while (rnd < 3) {
 
 \* Canary invariants that should break (this is to make sure that the specification reaches expected states):
 Canary1 == \A p \in P : output[p] = Bot
-Canary2 == \A p,q \in P : output[p] # Bot /\ output[q] # Bot => \neg (output[p][1] = "commit" /\ output[q][1] = "adopt")
-Canary3 == \A p,q \in P : output[p] # Bot /\ output[q] # Bot => \neg (output[p][1] = "adopt" /\ output[q][1] = "adopt" /\ output[p][2] # output[q][2])
+Canary2 == \A p,q \in P : 
+    /\ output[p] # Bot 
+    /\ output[q] # Bot 
+    => \neg (output[p][1] = "commit" /\ output[q][1] = "adopt")
+Canary3 == \A p,q \in P : 
+    /\ output[p] # Bot 
+    /\ output[q] # Bot 
+    => \neg (output[p][1] = "adopt" /\ output[q][1] = "adopt" /\ output[p][2] # output[q][2])
 
 =============================================================================
 \* Modification History
