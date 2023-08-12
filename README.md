@@ -1,5 +1,5 @@
 This repository contains supplemental material for the paper "Byzantine Consensus Under Dynamic
-Participation with a Well-Behaved Majority"
+Participation with a Well-Behaved Majority", to appear at DISC 2023.
 
 # PlusCal/TLA+ specification of the commit-adopt algorithm
 

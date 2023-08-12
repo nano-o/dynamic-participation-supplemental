@@ -38,18 +38,21 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
       corrupted = [r \in {1,2} |-> {}]; \* the set of corrupted processors in round r
     define {
         \* first we make some auxiliary definitions
-        \* the set of processors from which p received a message:
-        HeardOf(rcvd) == {p \in P : rcvd[p] # Bot} 
+        \* the set of processors from which p received a message (i.e. heard of)
+        HeardOf(p) == {q \in P : received[p][q] # Bot}
         \* the set of minority subsets of S:
         Minority(S) == {M \in SUBSET S : 2*Cardinality(M)<Cardinality(S)} 
-        VoteCount(rcvd, v) == Cardinality({p \in P : rcvd[p] = v})
-        VotedByMajority(rcvd) == {v \in V : 2*VoteCount(rcvd, v) > Cardinality(HeardOf(rcvd))}
-        MostVotedFor(rcvd) == {v \in V : \A w \in V \ {v} : VoteCount(rcvd, v) >= VoteCount(rcvd, w)}
+        \* the number of votes for v that p received:
+        VoteCount(p, v) == Cardinality({q \in P : received[p][q] = v})
+        \* the set of values v for which p received a strict majority of votes:
+        VotedByMajority(p) == {v \in V : 2*VoteCount(p, v) > Cardinality(HeardOf(p))}
+        \* the set of values v that were voted for the most often according to p:
+        MostVotedFor(p) == {v \in V : \A w \in V \ {v} : VoteCount(p, v) >= VoteCount(p, w)}
         \* for technical reasons, we need the program counter of a processor in round r:
         Pc(r) == CASE r = 1 -> "r1" 
                 [] r = 2 -> "r2"
                 [] r = 3 -> "r3"
-        \* Now the two safety properties:
+        \* Now we give the two safety properties:
         Agreement == \A p,q \in P : output[p] # Bot /\ output[q] # Bot /\ output[p][1] = "commit"
             => output[p][2] = output[q][2]
         Validity == \A p \in P : \A v \in V :
@@ -58,7 +61,7 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
     macro broadcast(v) {
         sent := [sent EXCEPT ![self] = v]
     }
-    \* The following macro is used to deliver messages to the processors.  It includes message corruptions by the advesary.
+    \* The following macro is used to deliver messages to the processors.  It includes message corruptions by the adversary:
     macro deliver_msgs() {
         with (ByzMsg \in [P -> [corrupted[rnd] -> V\cup {Bot, Lambda, NoCommit}]]) {
             \* we assert the properties of the no-equivocation model:
@@ -66,27 +69,29 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
                     ByzMsg[p1][q] \in V => ByzMsg[p2][q] \in {ByzMsg[p1][q], Lambda};
             received := [p \in P |-> [q \in P |->
                 IF q \in corrupted[rnd]
-                THEN ByzMsg[p][q]
-                ELSE sent[q]]];
+                THEN ByzMsg[p][q] \* p receives a corrupted message
+                ELSE sent[q]]]; \* p receives what q sent
         };
     }
-    \* Now the specification of the algorithm:
+    (***************************************************)
+    (* Now we give the specification of the algorithm: *)
+    (***************************************************)
     fair process (proc \in P) {
         \* in round 1, vote for input[self]:
 r1:     broadcast(input[self]);
 r2:     await rnd = 2;
         \* if there is a majority for a value v, propose to commit v:
-        if (VotedByMajority(received[self]) # {})
-            with (v \in VotedByMajority(received[self])) \* the set is a singleton at this point
+        if (VotedByMajority(self) # {})
+            with (v \in VotedByMajority(self)) \* the set is a singleton at this point
             broadcast(v)
         else
             broadcast(NoCommit);
-r3:     await rnd = 3;
-        if (VotedByMajority(received[self]) # {}) \* if there is a majority for a value v, commit v:
-            with (v \in VotedByMajority(received[self])) \* the set is a singleton at this point
+r3:     await rnd = 3; \* in round 3 we just produce an output
+        if (VotedByMajority(self) # {}) \* if there is a majority for a value v, commit v:
+            with (v \in VotedByMajority(self)) \* the set is a singleton at this point
             output[self] := <<"commit", v>>
-        else if (MostVotedFor(received[self]) # {}) \* otherwise, adopt a most voted value:
-            with (v \in MostVotedFor(received[self])) \* there can be multiple values in the set
+        else if (MostVotedFor(self) # {}) \* otherwise, adopt a most voted value:
+            with (v \in MostVotedFor(self)) \* there can be multiple values in the set
             output[self] := <<"adopt", v>>
         else \* if no value was voted for, adopt input:
             output[self] := <<"adopt", input[self]>>
@@ -100,10 +105,8 @@ r3:     await rnd = 3;
 adv:    while (rnd < 3) {
             await \A p \in P : pc[p] = Pc(rnd+1);
             \* pick a participating set:
-            with (Participating \in SUBSET P) {
-                when Participating # {};
+            with (Participating \in SUBSET P \ {{}})
                 participating[rnd] := Participating;
-            };
             \* pick a set of corrupted processors:
             with (Corrupted \in Minority(participating[rnd]))
                 corrupted[rnd] := Corrupted;
