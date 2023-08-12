@@ -35,7 +35,7 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
       received = [p \in P |-> [q \in P |-> Bot]];
       rnd = 1; \* the current round (1, 2, or 3); we end at 3 but nothing happens in round 3
       \* the processors' outputs (either Bot, <<"commit",v>>, or <<"adopt",v>>) for some v
-      output = [p \in P |-> Bot]; 
+      output = [p \in P |-> Bot];
     define {
         \* the set of processors from which p received a message (i.e. heard of):
         HeardOf(p) == {q \in P : received[p][q] # Bot}
