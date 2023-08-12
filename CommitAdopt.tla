@@ -31,10 +31,11 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
     variables
       input \in [P -> V]; \* the processors' inputs
       sent = [p \in P |-> Bot]; \* messages sent in the current round
-      \* message received by p from q in the current round; Bot means no message received:
+      \* message received by p from q in the current round; `Bot' means no message received:
       received = [p \in P |-> [q \in P |-> Bot]];
       rnd = 1; \* the current round (1, 2, or 3); we end at 3 but nothing happens in round 3
-      output = [p \in P |-> Bot]; \* the processors' outputs
+      \* the processors' outputs (either Bot, <<"commit",v>>, or <<"adopt",v>>) for some v
+      output = [p \in P |-> Bot]; 
     define {
         \* the set of processors from which p received a message (i.e. heard of):
         HeardOf(p) == {q \in P : received[p][q] # Bot}
