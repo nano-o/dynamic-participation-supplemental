@@ -31,12 +31,12 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
     variables
       input \in [P -> V]; \* the processors' inputs
       sent = [p \in P |-> Bot]; \* messages sent in the current round
-      received = [p \in P |-> [q \in P |-> Bot]]; \* message received by p from q in the current round
+      \* message received by p from q in the current round; Bot means no message received:
+      received = [p \in P |-> [q \in P |-> Bot]];
       rnd = 1; \* the current round (1, 2, or 3); we end at 3 but nothing happens in round 3
       output = [p \in P |-> Bot]; \* the processors' outputs
     define {
-        \* first we make some auxiliary definitions
-        \* the set of processors from which p received a message (i.e. heard of)
+        \* the set of processors from which p received a message (i.e. heard of):
         HeardOf(p) == {q \in P : received[p][q] # Bot}
         \* the set of minority subsets of S:
         Minority(S) == {M \in SUBSET S : 2*Cardinality(M)<Cardinality(S)} 
