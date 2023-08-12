@@ -46,7 +46,7 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
         \* the set of values v for which p received a strict majority of votes:
         VotedByMajority(p) == {v \in V : 2*VoteCount(p, v) > Cardinality(HeardOf(p))}
         \* the set of values v that were voted for the most often according to p:
-        MostVotedFor(p) == {v \in V : \A w \in V \ {v} : VoteCount(p, v) >= VoteCount(p, w)}
+        MostVotedFor(p) == {v \in V : \A w \in V \ {v} : VoteCount(p, v) > VoteCount(p, w)}
         \* for technical reasons, we need the program counter of a processor in round r:
         Pc(r) == CASE r = 1 -> "r1" 
                 [] r = 2 -> "r2"
@@ -61,7 +61,7 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
         sent := [sent EXCEPT ![self] = v]
     }
     \* The following macro is used to deliver messages to the processors.  It includes message corruptions by the adversary:
-    macro deliver_msgs(participanting, corrupted) {
+    macro deliver_msgs(participating, corrupted) {
         with (ByzMsg \in [P -> [corrupted -> V\cup {Bot, Lambda, NoCommit}]]) {
             \* we assert the properties of the no-equivocation model:
             when \A p1,p2 \in P : \A q \in corrupted :
@@ -71,8 +71,8 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
                 THEN ByzMsg[p][q] \* p receives a corrupted message
                 ELSE IF q \in participating
                     THEN sent[q] \* p receives what q sent
-                    ELSE Bot \* p receives nothing
-        };
+                    ELSE Bot]] \* p receives nothing
+        }
     }
     (***************************************************)
     (* Now we give the specification of the algorithm: *)
@@ -107,8 +107,8 @@ adv:    while (rnd < 3) {
             await \A p \in P : pc[p] = Pc(rnd+1);
             \* pick a participating set and a set of corrupted processors:
             with (Participating \in SUBSET P \ {{}})
-            with (Corrupted \in Minority(participating[rnd]))
-                deliver_msgs(participating, Corrupted);
+            with (Corrupted \in Minority(Participating))
+                deliver_msgs(Participating, Corrupted);
             rnd := rnd+1;
         }
     }
