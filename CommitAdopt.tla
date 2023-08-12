@@ -34,8 +34,6 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
       received = [p \in P |-> [q \in P |-> Bot]]; \* message received by p from q in the current round
       rnd = 1; \* the current round (1, 2, or 3); we end at 3 but nothing happens in round 3
       output = [p \in P |-> Bot]; \* the processors' outputs
-      participating = [r \in {1,2} |-> {}]; \* the set of participating processors in round r
-      corrupted = [r \in {1,2} |-> {}]; \* the set of corrupted processors in round r
     define {
         \* first we make some auxiliary definitions
         \* the set of processors from which p received a message (i.e. heard of)
@@ -62,15 +60,17 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda},{NoCommit}>>)
         sent := [sent EXCEPT ![self] = v]
     }
     \* The following macro is used to deliver messages to the processors.  It includes message corruptions by the adversary:
-    macro deliver_msgs() {
-        with (ByzMsg \in [P -> [corrupted[rnd] -> V\cup {Bot, Lambda, NoCommit}]]) {
+    macro deliver_msgs(participanting, corrupted) {
+        with (ByzMsg \in [P -> [corrupted -> V\cup {Bot, Lambda, NoCommit}]]) {
             \* we assert the properties of the no-equivocation model:
-            when \A p1,p2 \in P : \A q \in corrupted[rnd] :
+            when \A p1,p2 \in P : \A q \in corrupted :
                     ByzMsg[p1][q] \in V => ByzMsg[p2][q] \in {ByzMsg[p1][q], Lambda};
             received := [p \in P |-> [q \in P |->
-                IF q \in corrupted[rnd]
+                IF q \in corrupted
                 THEN ByzMsg[p][q] \* p receives a corrupted message
-                ELSE sent[q]]]; \* p receives what q sent
+                ELSE IF q \in participating
+                    THEN sent[q] \* p receives what q sent
+                    ELSE Bot \* p receives nothing
         };
     }
     (***************************************************)
@@ -104,13 +104,10 @@ r3:     await rnd = 3; \* in round 3 we just produce an output
     fair process (adversary \in {"adversary"}) {
 adv:    while (rnd < 3) {
             await \A p \in P : pc[p] = Pc(rnd+1);
-            \* pick a participating set:
+            \* pick a participating set and a set of corrupted processors:
             with (Participating \in SUBSET P \ {{}})
-                participating[rnd] := Participating;
-            \* pick a set of corrupted processors:
             with (Corrupted \in Minority(participating[rnd]))
-                corrupted[rnd] := Corrupted;
-            deliver_msgs();
+                deliver_msgs(participating, Corrupted);
             rnd := rnd+1;
         }
     }
@@ -118,11 +115,14 @@ adv:    while (rnd < 3) {
 *)
 
 \* Canary invariants that should break (this is to make sure that the specification reaches expected states):
+\* To find a state in which some process outputs:
 Canary1 == \A p \in P : output[p] = Bot
+\* To find a state in which some process commits while another adopts:
 Canary2 == \A p,q \in P : 
     /\ output[p] # Bot 
     /\ output[q] # Bot 
     => \neg (output[p][1] = "commit" /\ output[q][1] = "adopt")
+\* To find a state in which two processes adopt different values:
 Canary3 == \A p,q \in P : 
     /\ output[p] # Bot 
     /\ output[q] # Bot 
