@@ -1,6 +1,6 @@
 ---------------------------- MODULE NoEquivocation ----------------------------
 
-EXTENDS Naturals, FiniteSets, Utilities
+EXTENDS Naturals, FiniteSets, Utilities, TLC
 
 CONSTANT P, V, Lambda, Bot
 
@@ -14,7 +14,7 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda}>>)
       rnd = 1; \* 1..3
       output = [p \in P |-> [q \in P |-> Bot]];
       participating = [r \in {1,2} |-> {}];
-      corrupted = [r \in {1,2} |-> {}];
+      corrupted = {};
     define {
         TypeOkay == 
             /\ input \in [P -> V]
@@ -23,8 +23,8 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda}>>)
             /\ rnd \in {1,2,3}
             /\ output \in [P -> [P -> {Bot,Lambda} \cup V]]
             /\ participating \in [{1,2} -> SUBSET P]
-            /\ corrupted \in [{1,2} -> SUBSET P]
-        HeardOf(p) == {q \in P : received[p][q] # Bot}
+            /\ corrupted \in SUBSET P
+        HeardOf(p) == {q \in P : received[p][q] # Bot} \* heard of in the current round
         Minority(S) == {M \in SUBSET S : 2*Cardinality(M)<Cardinality(S)}
         NumHeardOf(p1, p2) == \* number of processes that report to p1 hearing from p2:
             Cardinality({q \in P : received[p1][q] # Bot /\ received[p1][q][p2] # Bot})
@@ -37,11 +37,11 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda}>>)
             IF \E v \in V : ValidOutput(p1, p2, v) \* true for at most one value v
             THEN CHOOSE v \in V : ValidOutput(p1, p2, v)
             ELSE
-                IF 2*NumHeardOf(p1, p2) > Cardinality(HeardOf(p1))
-                THEN Lambda \* output the failure notification
-                ELSE Bot \* ignore p2
-        SimulatedParticipants == {p \in P : \E q \in P : output[p][q] # Bot}
-        CorrectSimulatedParticipants == participating[1] \ corrupted[1]
+                IF \E q \in P : received[p1][q] # Bot /\ received[p1][q][p2] # Bot
+                THEN Lambda
+                ELSE Bot
+        SimulatedParticipants == {p \in P : \E q \in P : output[q][p] # Bot}
+        CorrectSimulatedParticipants == participating[1] \ corrupted
         \* Now we define the correctness properties of the algorithm:
         NoEquivocation == \A p1,p2,q \in P :
             output[p1][q] \in V /\ pc[p2] = "Done" => output[p2][q] \in {output[p1][q], Lambda}
@@ -49,9 +49,9 @@ ASSUME Distinct(<<P,V,{Bot},{Lambda}>>)
             /\ p \in CorrectSimulatedParticipants
             /\ pc[q] = "Done"
             => output[q][p] = input[p]
-        MinorityCorruption ==
+        MinorityCorruption == (\A p \in P : pc[p] = "Done") =>
             2*Cardinality(CorrectSimulatedParticipants) > Cardinality(SimulatedParticipants)
-        CorrectSimulation == NoEquivocation /\ NoTampering /\ MinorityCorruption
+        Correctness == NoEquivocation /\ NoTampering /\ MinorityCorruption
     }
     macro broadcast(v) {
         sent := [sent EXCEPT ![self] = v]
@@ -64,7 +64,7 @@ r1:     broadcast(input[self]);
 r2:     await rnd = 2; 
         broadcast(received[self]);
 r3:     await rnd = 3;
-        output[self] := [p \in P |-> Output(received[self],p)];
+        output[self] := [p \in P |-> Output(self,p)];
     }
     (***********************************************************************)
     (* Below we specify the behavior of the adversary.                     *)
@@ -77,16 +77,16 @@ a1:    await \A p \in P : pc[p] = "r2";
             participating[rnd] := Participating;
         };
         \* pick a set whose messages will be tampered with:
-        with (Corrupted \in Minority(participating[rnd]))
-            corrupted[rnd] := Corrupted;
+        with (Corrupted \in Minority(participating[1]))
+            corrupted := Corrupted;
         \* tamper with the messages:
-        with(ByzVal \in [corrupted[rnd] -> [P -> V\cup{Bot}]]) {
+        with(ByzVal \in [corrupted -> [P -> V\cup{Bot}]]) {
             received := [p \in P |-> [q \in P |-> 
-                IF q \in corrupted[rnd]
+                IF q \in corrupted
                 \* in round 1, the adversary can make up any value:
                 THEN ByzVal[q][p]
                 ELSE
-                    IF q \in participating[rnd] \ corrupted[rnd]
+                    IF q \in participating[rnd] \ corrupted
                     THEN sent[q]
                     ELSE Bot]];
         };
@@ -94,21 +94,27 @@ a1:    await \A p \in P : pc[p] = "r2";
 a2:     await \A p \in P : pc[p] = "r3";
         with (Participating \in SUBSET P) {
             when Participating # {};
-            participating[rnd] := Participating;
+            when corrupted \in Minority(Participating);
+            participating[2] := Participating;
         };
-        with (Corrupted \in Minority(participating[rnd]))
-            corrupted[2] := Corrupted;
-        with (ByzVal \in [corrupted[rnd] -> [P -> [P -> V\cup{Bot}]]]) {
+        \* uncomment the following three lines to obtain a counter-example to MinorityCorruption under a growing adversary:
+        \* with (Corrupted \in Minority(participating[2])) {
+        \*     when corrupted \subseteq Corrupted;
+        \*     corrupted := Corrupted };
+        with (ByzVal \in [corrupted -> [P -> [P -> V\cup{Bot}] \cup {Bot}]]) {
             \* In round 2, the adversary can only lie by omission about non-corrupted processes (because of signatures):
-            when \A p \in P : \A q \in corrupted[rnd] : \A p1 \in P \ corrupted[1] :
-                IF p1 \in participating[1]
-                THEN ByzVal[q][p][p1] \in {Bot,input[p1]} \* either the adversary reports not hearing from p1, or it reports p1's true input
-                ELSE ByzVal[q][p][p1] = Bot;
+            when \A p1 \in P : \A q \in corrupted : \A p2 \in (P \ corrupted) :
+                IF ByzVal[q][p1] # Bot
+                THEN 
+                    IF p2 \in participating[1]
+                    THEN ByzVal[q][p1][p2] \in {Bot,input[p2]} \* either the adversary reports not hearing from p1, or it reports p2's true input
+                    ELSE ByzVal[q][p1][p2] = Bot
+                ELSE TRUE; \* TODO: why does \/ short-circuiting not work here?
             received := [p \in P |-> [q \in P |-> 
-                IF q \in corrupted[rnd]
+                IF q \in corrupted
                 THEN ByzVal[q][p]
                 ELSE
-                    IF q \in participating[rnd] \ corrupted[rnd]
+                    IF q \in participating[rnd] \ corrupted
                     THEN sent[q]
                     ELSE Bot]];
         };
@@ -116,7 +122,7 @@ a2:     await \A p \in P : pc[p] = "r3";
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "30bca7cc" /\ chksum(tla) = "4272bf2e")
+\* BEGIN TRANSLATION (chksum(pcal) = "1ae244ac" /\ chksum(tla) = "e5ad08d1")
 VARIABLES input, sent, received, rnd, output, participating, corrupted, pc
 
 (* define statement *)
@@ -127,7 +133,7 @@ TypeOkay ==
     /\ rnd \in {1,2,3}
     /\ output \in [P -> [P -> {Bot,Lambda} \cup V]]
     /\ participating \in [{1,2} -> SUBSET P]
-    /\ corrupted \in [{1,2} -> SUBSET P]
+    /\ corrupted \in SUBSET P
 HeardOf(p) == {q \in P : received[p][q] # Bot}
 Minority(S) == {M \in SUBSET S : 2*Cardinality(M)<Cardinality(S)}
 NumHeardOf(p1, p2) ==
@@ -141,11 +147,11 @@ Output(p1, p2) ==
     IF \E v \in V : ValidOutput(p1, p2, v)
     THEN CHOOSE v \in V : ValidOutput(p1, p2, v)
     ELSE
-        IF 2*NumHeardOf(p1, p2) > Cardinality(HeardOf(p1))
+        IF \E q \in P : received[p1][q] # Bot /\ received[p1][q][p2] # Bot
         THEN Lambda
         ELSE Bot
-SimulatedParticipants == {p \in P : \E q \in P : output[p][q] # Bot}
-CorrectSimulatedParticipants == participating[1] \ corrupted[1]
+SimulatedParticipants == {p \in P : \E q \in P : output[q][p] # Bot}
+CorrectSimulatedParticipants == participating[1] \ corrupted
 
 NoEquivocation == \A p1,p2,q \in P :
     output[p1][q] \in V /\ pc[p2] = "Done" => output[p2][q] \in {output[p1][q], Lambda}
@@ -153,9 +159,9 @@ NoTampering == \A p,q \in P :
     /\ p \in CorrectSimulatedParticipants
     /\ pc[q] = "Done"
     => output[q][p] = input[p]
-MinorityCorruption ==
+MinorityCorruption == (\A p \in P : pc[p] = "Done") =>
     2*Cardinality(CorrectSimulatedParticipants) > Cardinality(SimulatedParticipants)
-CorrectSimulation == NoEquivocation /\ NoTampering /\ MinorityCorruption
+Correctness == NoEquivocation /\ NoTampering /\ MinorityCorruption
 
 
 vars == << input, sent, received, rnd, output, participating, corrupted, pc
@@ -170,7 +176,7 @@ Init == (* Global variables *)
         /\ rnd = 1
         /\ output = [p \in P |-> [q \in P |-> Bot]]
         /\ participating = [r \in {1,2} |-> {}]
-        /\ corrupted = [r \in {1,2} |-> {}]
+        /\ corrupted = {}
         /\ pc = [self \in ProcSet |-> CASE self \in P -> "r1"
                                         [] self \in {"adversary"} -> "a1"]
 
@@ -189,7 +195,7 @@ r2(self) == /\ pc[self] = "r2"
 
 r3(self) == /\ pc[self] = "r3"
             /\ rnd = 3
-            /\ output' = [output EXCEPT ![self] = [p \in P |-> Output(received[self],p)]]
+            /\ output' = [output EXCEPT ![self] = [p \in P |-> Output(self,p)]]
             /\ pc' = [pc EXCEPT ![self] = "Done"]
             /\ UNCHANGED << input, sent, received, rnd, participating, 
                             corrupted >>
@@ -201,15 +207,15 @@ a1(self) == /\ pc[self] = "a1"
             /\ \E Participating \in SUBSET P:
                  /\ Participating # {}
                  /\ participating' = [participating EXCEPT ![rnd] = Participating]
-            /\ \E Corrupted \in Minority(participating'[rnd]):
-                 corrupted' = [corrupted EXCEPT ![rnd] = Corrupted]
-            /\ \E ByzVal \in [corrupted'[rnd] -> [P -> V\cup{Bot}]]:
+            /\ \E Corrupted \in Minority(participating'[1]):
+                 corrupted' = Corrupted
+            /\ \E ByzVal \in [corrupted' -> [P -> V\cup{Bot}]]:
                  received' =         [p \in P |-> [q \in P |->
-                             IF q \in corrupted'[rnd]
+                             IF q \in corrupted'
                              
                              THEN ByzVal[q][p]
                              ELSE
-                                 IF q \in participating'[rnd] \ corrupted'[rnd]
+                                 IF q \in participating'[rnd] \ corrupted'
                                  THEN sent[q]
                                  ELSE Bot]]
             /\ rnd' = 2
@@ -220,19 +226,24 @@ a2(self) == /\ pc[self] = "a2"
             /\ \A p \in P : pc[p] = "r3"
             /\ \E Participating \in SUBSET P:
                  /\ Participating # {}
-                 /\ participating' = [participating EXCEPT ![rnd] = Participating]
-            /\ \E Corrupted \in Minority(participating'[rnd]):
-                 corrupted' = [corrupted EXCEPT ![2] = Corrupted]
-            /\ \E ByzVal \in [corrupted'[rnd] -> [P -> [P -> V\cup{Bot}]]]:
-                 /\  \A p \in P : \A q \in corrupted'[rnd] : \A p1 \in P \ corrupted'[1] :
-                    IF p1 \in participating'[1]
-                    THEN ByzVal[q][p][p1] \in {Bot,input[p1]}
-                    ELSE ByzVal[q][p][p1] = Bot
+                 /\ corrupted \in Minority(Participating)
+                 /\ participating' = [participating EXCEPT ![2] = Participating]
+            /\ \E Corrupted \in Minority(participating'[2]):
+                 /\ corrupted \subseteq Corrupted
+                 /\ corrupted' = Corrupted
+            /\ \E ByzVal \in [corrupted' -> [P -> [P -> V\cup{Bot}] \cup {Bot}]]:
+                 /\  \A p1 \in P : \A q \in corrupted' : \A p2 \in (P \ corrupted') :
+                    IF ByzVal[q][p1] # Bot
+                    THEN
+                        IF p2 \in participating'[1]
+                        THEN ByzVal[q][p1][p2] \in {Bot,input[p2]}
+                        ELSE ByzVal[q][p1][p2] = Bot
+                    ELSE TRUE
                  /\ received' =         [p \in P |-> [q \in P |->
-                                IF q \in corrupted'[rnd]
+                                IF q \in corrupted'
                                 THEN ByzVal[q][p]
                                 ELSE
-                                    IF q \in participating'[rnd] \ corrupted'[rnd]
+                                    IF q \in participating'[rnd] \ corrupted'
                                     THEN sent[q]
                                     ELSE Bot]]
             /\ rnd' = 3
