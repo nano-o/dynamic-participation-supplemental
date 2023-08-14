@@ -36,4 +36,4 @@ endef
 tlc: $(SPECS:=.pdf) $(SPECS:=_MC.tla) $(SPECS:=_MC.cfg) $(JAR)
 	$(foreach spec,$(SPECS),$(call RUN_TLC,$(spec)))
 
-.PHONY: all clean $(SPECS:=.clean) $(SPECS:=.tlc) tlc
+.PHONY: all clean tlc
