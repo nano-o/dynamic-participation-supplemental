@@ -1,6 +1,8 @@
 This repository contains supplemental material for the brief announcement "Byzantine Consensus Under Dynamic
 Participation with a Well-Behaved Majority", to appear at DISC 2023.
 
+The makefile typesets the specifications by default, and `make tlc` runs the TLC model-checker.
+
 # PlusCal/TLA+ specification of the no-equivocation simulation algorithm
 
 See [NoEquivocation.tla](./NoEquivocation.tla) and its typeset version [NoEquivocation.pdf](./NoEquivocation.pdf).

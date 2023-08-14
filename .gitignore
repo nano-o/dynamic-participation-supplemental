@@ -28,6 +28,7 @@
 
 ## scripts
 !*.sh
+!Makefile
 
 ## Blacklist TLAPS cache folder
 ## See https://github.com/tlaplus/tlapm/issues/16

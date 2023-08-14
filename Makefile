@@ -11,18 +11,29 @@ all: $(TARGETS)
 $(JAR):
 	wget $(JAR_URL)
 
+# Don't download the JAR every time
+.PRECIOUS: $(JAR)
+
 # Rule to produce .tex files from .tla files using the tla2tools.jar
 %.tex: %.tla $(JAR)
-	bash -x ./create_tex_file.sh $<
+	set -e; \
+	TMPFILE=$$(mktemp --suffix=.tla --tmpdir=./ XXXXXXXX); \
+	sed '/\* BEGIN TRANSLATION/,/\* END TRANSLATION/d' $< > "$$TMPFILE"; \
+	java -cp tla2tools.jar tla2tex.TLA -shade -noPcalShade -nops "$$TMPFILE" && mv "$${TMPFILE%.tla}.tex" $@; \
+	rm -f "$$TMPFILE" "$${TMPFILE%.tla}.log" "$${TMPFILE%.tla}.dvi" "$${TMPFILE%.tla}.aux"
 
 %.pdf: %.tex
 	$(LATEXMK) $(LATEXMK_OPTS) $<
 
-clean: $(SPECS:=.clean)
+clean:
 	$(RM) $(SPECS:=.pdf)
 
-%.clean: %.tex
-	$(LATEXMK) -C $<
-	$(RM) $<
+define RUN_TLC
+	java -cp tla2tools.jar pcal.trans -nocfg $(1).tla;
+	java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC $(1)_MC.tla;
+endef
 
-.PHONY: all clean $(SPECS:=.clean)
+tlc: $(SPECS:=.pdf) $(SPECS:=_MC.tla) $(SPECS:=_MC.cfg) $(JAR)
+	$(foreach spec,$(SPECS),$(call RUN_TLC,$(spec)))
+
+.PHONY: all clean $(SPECS:=.clean) $(SPECS:=.tlc) tlc
