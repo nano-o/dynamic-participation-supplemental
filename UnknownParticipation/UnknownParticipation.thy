@@ -1,4 +1,4 @@
-theory MessageAdversary
+theory UnknownParticipation
   imports Main "HOL-Library.Multiset"
 begin
 
@@ -69,9 +69,8 @@ notation lambda ("\<lambda>")
 end
 
 locale round = pre_round +
-  assumes 
-    p1:"F \<subseteq> P" 
-    and p2:"majority C P"
+  assumes
+    p2:"majority C P" \<comment> \<open>majority correct\<close>
     and p3:"\<And> p p' q . \<lbrakk>q \<in> HO p; rcvd p q \<noteq> \<lambda>\<rbrakk> \<Longrightarrow> rcvd p' q \<in> {rcvd p q, \<lambda>}" \<comment> \<open>no equivocation\<close>
     and p4:"\<And> p . P-F \<subseteq> HO p" \<comment> \<open>all participating, non-faulty processors are heard of\<close>
     and p5:"\<And> p q . q \<in> C \<Longrightarrow> rcvd p q = bcast q" \<comment> \<open>messages from participating, non-faulty processors are delivered intact\<close>
@@ -80,7 +79,7 @@ locale round = pre_round +
     and p8:"\<And> p p' q . \<lbrakk>q \<in> HO p; rcvd p q \<noteq> \<lambda>\<rbrakk> \<Longrightarrow> q \<in> HO p'" \<comment> \<open>if @{term p} receives a non-@{term \<lambda>} message form @{term q}, then all hear from @{term q}\<close>
 begin
 
-section "Main Lemmas about the Shared-Memory Model"
+section "Properties of the Gafni-Losa model"
 
 lemma maj_includes_correct:
   \<comment> \<open>A majority among a heard-of set includes a correct processor\<close>
@@ -142,66 +141,40 @@ proof -
     by (metis C_def Diff_disjoint empty_subsetI inf.assoc inf.commute inf.orderE ho_sets_intersect majorities_intersect)
 qed
 
-lemma ca_lemma:
+lemma ca_lemma_2:
   \<comment> \<open>This is the most important lemma\<close>
-  fixes p p' m_1 m m_2 M_1 M_1' M'
-  assumes "m \<noteq> m_1" and "m \<noteq> \<lambda>" and "m \<noteq> m_2"
-    and "\<And> p . bcast p = m_1 \<or> bcast p = m_2" \<comment> \<open>processors only send @{term m_1} or @{term m_2}\<close>
+  fixes p p' m_1 m M_1 M_1' M'
+  assumes "m \<noteq> m_1" and "m \<noteq> \<lambda>"
+    and "\<And> p . bcast p \<noteq> m" \<comment> \<open>processors never send @{term m}\<close>
   defines "M_1 \<equiv> {q \<in> HO p . rcvd p q = m_1}"
   assumes "majority M_1 (HO p)" \<comment> \<open>@{term p} receives @{term m_1} from a strict majority of the processors that it hears of\<close>
   defines "M_1' \<equiv> {q \<in> HO p' . rcvd p' q = m_1}"
     and "M' \<equiv> {q \<in> HO p' . rcvd p' q = m}"
   shows "card M' < card M_1'" \<comment> \<open>@{term p'} receives @{term m_1} more often than @{term m}\<close>
-proof - 
+proof -
   have "m_1 \<noteq> \<lambda>"
-    by (metis (mono_tags, lifting) CollectD M_1_def assms(6) maj_not_lambda majority_def)
-
-  define A 
-    \<comment> \<open>We start by defining the set @{term A} of processors among @{term M_1} from which @{term p'} does not receive @{term m_1}\<close>
-    where "A \<equiv> {q \<in> HO p . rcvd p q = m_1 \<and> rcvd p' q \<noteq> m_1}"
-
-  have "M_1-A \<subseteq> M_1'"
-    \<comment> \<open>It is easy to see that @{term M_1'} is a super-set of @{term "M_1-A"}\<close>
-    unfolding M_1_def M_1'_def A_def
-    using \<open>m_1 \<noteq> \<lambda>\<close> p8 by force
-
-  hence "card M_1' - card M' \<ge> card M_1 - card (A \<union> M')"
+    by (metis (mono_tags, lifting) CollectD M_1_def assms(5) maj_not_lambda majority_def)
+  define F' where "F' \<equiv> F \<inter> HO p \<inter> HO p'"
+  have "M_1 - F' \<subseteq> M_1'" unfolding M_1_def M_1'_def F'_def
+    by (smt (verit, del_insts) Diff_iff IntI \<open>m_1 \<noteq> \<lambda>\<close> mem_Collect_eq round_axioms round_def subsetD subsetI)
+  moreover
+  have "M' \<subseteq> F' - M_1"
+    unfolding M'_def M_1_def F'_def
+    by (clarify, smt (verit, ccfv_threshold) C_def DiffI IntI \<open>m_1 \<noteq> \<lambda>\<close> assms(1-3) insertE mem_Collect_eq p5 p6 p8 round.p3 round_axioms singletonD subsetD)
+  moreover
+  have "card (F' - M_1) < card (M_1 - F')"
   proof -
-    have "card M_1' \<ge> card M_1 - card A"
-      by (meson \<open>M_1 - A \<subseteq> M_1'\<close> card_mono diff_card_le_card_Diff finite le_trans)
-    moreover
-    have "A \<inter> M' = {}" unfolding A_def M'_def
-      using \<open>m_1 \<noteq> \<lambda>\<close> assms(2) p3 by auto
-    ultimately show ?thesis
-      by (metis card_Un_disjoint diff_diff_left diff_le_mono finite)
+    have "card F' < card M_1"
+      by (metis F'_def assms(5) card_maj_gt_card_not_maj faulty_min_among_hos inf.idem inf_assoc inf_le1 inf_left_commute maj_increasing)
+    thus ?thesis
+      by (simp add: card_less_sym_Diff)
   qed
-
-  have "A \<union> M' \<subseteq> F \<inter> HO p \<inter> HO p'"
-  proof -
-    have "A \<union> M' \<subseteq> F" using A_def p5 p6 assms(1,3,4) M'_def C_def
-      by fastforce
-    moreover have "A \<subseteq> HO p \<inter> HO p'"
-      using A_def \<open>m_1 \<noteq> \<lambda>\<close> p8 by auto 
-    moreover have "M' \<subseteq> HO p \<inter> HO p'"
-      using M'_def assms(2) p8 by auto
-    ultimately show ?thesis
-      by blast
-  qed
-
-  have "majority M_1 (HO p \<inter> HO p')"
-    using M_1_def assms(6) maj_is_maj_among_hos by fastforce
-  moreover 
-  have  "\<not>majority (A \<union> M') (HO p \<inter> HO p')"
-    using \<open>A \<union> M' \<subseteq> F \<inter> HO p \<inter> HO p'\<close>
-    by (metis inf_assoc inf_le2 faulty_min_among_hos maj_increasing) 
-  ultimately have "card M_1 > card (A \<union> M')"
-    by (meson \<open>A \<union> M' \<subseteq> F \<inter> HO p \<inter> HO p'\<close> card_maj_gt_card_not_maj le_inf_iff)
-
+  ultimately 
   show ?thesis
-    using \<open>card (A \<union> M') < card M_1\<close> \<open>card M_1 - card (A \<union> M') \<le> card M_1' - card M'\<close> by linarith
+    by (meson card_mono finite not_less order_le_less_trans)
 qed
 
-section "Additional properties"
+subsection "Additional properties"
 
 lemma l2:
   \<comment> \<open>There cannot be two different unanimous majorities\<close>
@@ -247,6 +220,14 @@ end
 
 section \<open>Algorithms on blockchains\<close>
 
+subsection \<open>Chains as partial orders\<close>
+
+text \<open>
+In this section we view chains as partial orders with bot and a no-convergence property (i.e. rooted trees).
+This is the type class @{term chain_order} below. We make a few useful definition to talk about chains (conflicting,
+compatible, etc.)
+\<close>
+
 context ord
 begin
 
@@ -264,23 +245,20 @@ lemma conflicting_comm: "conflicting x y = conflicting y x"
 
 lemma conflicting_is_not_compat:"conflicting x y = (\<not> compatible x y)"
   by (simp add: compatible_def conflicting_def)
+
 end
 
 class chain_order = order_bot +
   assumes non_convergence:"conflicting x y \<and> y \<le> v \<longrightarrow> conflicting x v"
 
-lemma l:
-  fixes x y v :: "'a::chain_order"
-  assumes "conflicting x y" and "y \<le> v"
-  shows "conflicting x v"
-  using assms non_convergence by auto
-
 definition tip where
-  "tip m x \<equiv> x \<in># m \<and> (\<forall> y \<in># m . y \<le> x \<or> conflicting x y)"
-
+  \<comment> \<open>A tip among a set of chains\<close>
+  "tip m x \<equiv> x \<in> m \<and> (\<forall> y \<in> m . y \<le> x \<or> conflicting x y)"
+                                  
 definition most_frequent_tip :: "('a::ord) multiset \<Rightarrow> 'a \<Rightarrow> bool" where
+  \<comment> \<open>A tip that is most frequent among a multi-set of chains (there is a unique such tip)\<close>
   "most_frequent_tip m x \<equiv> 
-    tip m x \<and> (\<forall> y . y \<in># m \<and> conflicting x y \<longrightarrow> count m y < count m x)"
+    tip (set_mset m) x \<and> (\<forall> y . y \<in># m \<and> conflicting x y \<longrightarrow> count m y < count m x)"
 
 lemma most_frequent_tip_unique:
   fixes m and x y ::"'a::order"
@@ -290,37 +268,34 @@ lemma most_frequent_tip_unique:
 
 definition maximally_frequent_tip :: "('a::order) multiset \<Rightarrow> 'a \<Rightarrow> bool" where
   "maximally_frequent_tip m x \<equiv> 
-    tip m x \<and> (\<forall> y . y \<in># m \<and> conflicting x y \<longrightarrow> count m y \<le> count m x)"
+    tip (set_mset m) x \<and> (\<forall> y . y \<in># m \<and> conflicting x y \<longrightarrow> count m y \<le> count m x)"
 
-text \<open>
-Now we would like to state and prove an equivalent of Lemma ca_lemma but using chains. Moreover, we would like 
-to allow not only one chain @{term m_1} to be voted for, but also prefixes of it (corresponding to messages from 
-previous rounds).
-\<close>
+subsection \<open>Specification of the second round (in the no-equivocation model) of the chain-CA algorithm\<close>
 
 locale pre_chain_round =
-  fixes 
+  fixes
     P  \<comment> \<open>The participating set for the round\<close>
     F  \<comment> \<open>The faulty set\<close>
     C :: "('p::finite) set" \<comment> \<open>The set of participating, non-faulty processors\<close>
     and
     HO :: "'p \<Rightarrow> 'p set" \<comment> \<open>Maps each processor to the set of processors it hears of\<close>
     and
-    bcast :: "'p \<Rightarrow> ('m::chain_order)" \<comment> \<open>@{term "bcast p = m"} means @{term p} broadcasts @{term m}.\<close>
+    bcast :: "'p \<Rightarrow> ('m::chain_order)" \<comment> \<open>@{term "bcast p = m"} means @{term p} broadcasts @{term m}\<close>
     and
-    rcvd :: "'p \<Rightarrow> 'p \<Rightarrow> 'm option" \<comment> \<open>@{term "rcvd p q = m"} means @{term p} receives @{term m} from @{term q}\<close>
+    rcvd :: "'p \<Rightarrow> 'p \<Rightarrow> 'm option" \<comment> \<open>@{term "rcvd p q = Some m"} means @{term p} receives @{term m} from @{term q}\<close>
   defines "C \<equiv> P-F"
 
 locale chain_round = pre_chain_round +
   assumes 
-    p1:"F \<subseteq> P" 
-    and p2:"majority C P"
+    p2:"majority C P" \<comment> \<open>majority of correct processes\<close>
     and p3:"\<And> p p' q . \<lbrakk>q \<in> HO p; rcvd p q \<noteq> None\<rbrakk> \<Longrightarrow> rcvd p' q \<in> {rcvd p q, None}" \<comment> \<open>no equivocation\<close>
     and p4:"\<And> p . P-F \<subseteq> HO p" \<comment> \<open>all participating, non-faulty processors are heard of\<close>
     and p5:"\<And> p q . q \<in> C \<Longrightarrow> rcvd p q = Some (bcast q)" \<comment> \<open>messages from participating, non-faulty processors are delivered intact\<close>
     and p6:"\<And> p . HO p \<subseteq> P" \<comment> \<open>only participating processors are heard of\<close>
     and p8:"\<And> p p' q . \<lbrakk>q \<in> HO p; rcvd p q \<noteq> None\<rbrakk> \<Longrightarrow> q \<in> HO p'" \<comment> \<open>if @{term p} receives a message form @{term q}, then all hear from @{term q}\<close>
 begin
+
+subsection \<open>The main lemma\<close>
 
 lemma maj_includes_correct:
   \<comment> \<open>A majority among a heard-of set includes a correct processor\<close>
@@ -374,6 +349,7 @@ proof -
 qed
 
 lemma chain_ca_lemma:
+  \<comment> \<open>This is the main lemma\<close>
   fixes p :: "'a::finite"
     and p' :: "'a::finite"
     and x :: "'b::chain_order" 
@@ -384,7 +360,7 @@ lemma chain_ca_lemma:
   assumes "majority X (HO p)" \<comment> \<open>@{term p} receives an extension of @{term x} from a strict majority of the processors that it hears of\<close>
   defines "X' \<equiv> {q \<in> HO p' . \<exists> v . rcvd p' q = Some v \<and> x \<le> v}"
   defines "Y' \<equiv> {q \<in> HO p' . \<exists> v . rcvd p' q = Some v \<and> y \<le> v}"
-  shows "card Y' < card X'" \<comment> \<open>@{term p'} receives an extension @{term x} more often than it receives an extension of @{term y}\<close>
+  shows "card Y' < card X'" \<comment> \<open>@{term p'} receives an extension of @{term x} more often than it receives an extension of @{term y}\<close>
   (*nitpick[verbose, card 'a=3, card 'b=3, card nat=10, card "'a list" = 20, bits=6]*)
 proof -
 
@@ -443,5 +419,26 @@ receives either a value that conflicts with @{term x} or the failure indication.
 qed
 
 end
+
+section "MMR"
+
+text \<open>
+Here we want to model and prove correct the MMR algorithm.
+\<close>
+
+locale pre_mmr =
+  fixes
+    P :: "nat \<Rightarrow> ('p::finite) set" \<comment> \<open>The participating set for each the round\<close>
+    and
+    F :: "nat \<Rightarrow> 'p set" \<comment> \<open>The faulty set for each round\<close>
+    and
+    C :: "nat \<Rightarrow> 'p set" \<comment> \<open>The set of participating, non-faulty processors\<close>
+    and
+    HO :: "nat \<Rightarrow> 'p \<Rightarrow> 'p set" \<comment> \<open>Maps each processor to the set of processors it hears of in each round\<close>
+    and
+    bcast :: "nat \<Rightarrow> 'p \<Rightarrow> ('m::chain_order)" \<comment> \<open>@{term "bcast i p = m"} means @{term p} broadcasts @{term m} in round @{term i}\<close>
+    and
+    rcvd :: "nat \<Rightarrow> 'p \<Rightarrow> 'p \<Rightarrow> 'm option" \<comment> \<open>@{term "rcvd i p q = Some m"} means @{term p} receives @{term m} from @{term q} in round @{term i}\<close>
+  defines "C \<equiv> P-F"
 
 end

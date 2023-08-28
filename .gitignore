@@ -9,6 +9,11 @@
 ## Whitelist TLA+ files
 !*.tla
 
+## Whitelist Isabelle files
+!UnknownParticipation/
+!UnknownParticipation/ROOT
+!*.thy
+
 ## Whitelist PDF files
 !*.pdf
 

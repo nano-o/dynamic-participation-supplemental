@@ -1,0 +1,12 @@
+session UnknownParticipation = "HOL-Library" +
+  options [document = pdf, document_output = "output"]
+  theories
+    UnknownParticipation
+(*theories [document = false]
+    A
+    B
+  theories
+    C
+    D*)
+  document_files
+    "root.tex"
