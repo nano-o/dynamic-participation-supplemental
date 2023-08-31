@@ -10,9 +10,14 @@
 !*.tla
 
 ## Whitelist Isabelle files
-!UnknownParticipation/
-!UnknownParticipation/ROOT
+!DynamicConsensus/
+!DynamicConsensus/ROOT
+!DynamicConsensus/document/
+!browser_info/
 !*.thy
+!*.tex
+!*.html
+!*.css
 
 ## Whitelist PDF files
 !*.pdf
