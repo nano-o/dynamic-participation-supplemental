@@ -23,3 +23,9 @@ See [CommitAdopt.tla](./CommitAdopt.tla) and its typeset version [CommitAdopt.pd
 configuration files for the TLC model-checker. If you are using the TLA+ VSCode extension, you can
 model-check the specification by opening [CommitAdopt_MC.tla](./CommitAdopt_MC.tla) and running TLC from
 this file.
+
+# Mechanically-checked proofs in Isabelle/HOL
+
+We formalize the no-equivocation model in Isabelle/HOL and we prove the main lemma justifying the correctness of the commit-adopt algorithm.
+You can browse the proof at [`DynamicConsensus/browser_info/DynamicConsensus.html`](https://htmlpreview.github.io/?https://raw.githubusercontent.com/nano-o/dynamic-participation-supplemental/isabelle-proofs/DynamicConsensus/browser_info/DynamicConsensus.html).
+The actual theory file (which must be opened using [Isabelle](https://isabelle.in.tum.de/)) is [`DynamicConsensus/DynamicConsensus.thy`](DynamicConsensus/DynamicConsensus.thy)

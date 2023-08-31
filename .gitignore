@@ -9,6 +9,16 @@
 ## Whitelist TLA+ files
 !*.tla
 
+## Whitelist Isabelle files
+!DynamicConsensus/
+!DynamicConsensus/ROOT
+!DynamicConsensus/document/
+!browser_info/
+!*.thy
+!*.tex
+!*.html
+!*.css
+
 ## Whitelist PDF files
 !*.pdf
 
