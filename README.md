@@ -1,5 +1,4 @@
-This repository contains supplemental material for the brief announcement "Byzantine Consensus Under Dynamic
-Participation with a Well-Behaved Majority", to appear at DISC 2023.
+This repository contains supplemental material for the brief announcement [Byzantine Consensus Under Dynamic Participation with a Well-Behaved Majority](https://losa.fr/dynamic-consensus/brief-extended.pdf), to appear at DISC 2023.
 
 The makefile typesets the specifications by default, and `make tlc` runs the TLC model-checker.
 
