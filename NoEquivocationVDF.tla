@@ -1,26 +1,26 @@
 ----------------- MODULE NoEquivocationVDF --------------------
 
-(***********************************************************************************)
-(* Consider the Gorilla model. We want to implement a broadcast abstraction such   *)
-(* that, each round, each well-behaved player receives more messages from          *)
-(* well-behaved players than from ill-behaved players.                             *)
-(*                                                                                 *)
-(* We require that every message m carry a VDF evaluation VDF(m) and we assume     *)
-(* that well-behaved players discount any messages unless it has a correct VDF     *)
-(* evaluation.                                                                     *)
-(*                                                                                 *)
-(* However, just requiring that every message m carry a correct VDF evaluation     *)
-(* VDF(m) is not enough for this because ill-behaved players could for example     *)
-(* pre-compute VDF evaluations in one round to later use them in the next round in *)
-(* order to overwhelm the well-behaved players.                                    *)
-(*                                                                                 *)
-(* To prevent this, we additionally require that each message include a set of     *)
-(* (valid) messages from the previous round and that this set be big enough to     *)
-(* ensure that it includes at least one message from a well-behaved player. This   *)
-(* ensures that ill-behaved players cannot pre-compute VDF outputs. The trick is   *)
-(* to figure out how to ensure that a set of messages contains at least one        *)
-(* message from a well-behaved player. This is what the algorithm below does.      *)
-(***********************************************************************************)
+(**********************************************************************************)
+(* Consider the Gorilla model. We want to implement a broadcast abstraction such  *)
+(* that, each round, each well-behaved player receives more messages from         *)
+(* well-behaved players than from ill-behaved players.                            *)
+(*                                                                                *)
+(* We require that every message m carry a VDF evaluation VDF(m) and we assume    *)
+(* that well-behaved players discount any messages unless it has a correct VDF    *)
+(* evaluation (such messages are considered invalid).                             *)
+(*                                                                                *)
+(* However, just requiring that every message m carry a correct VDF evaluation    *)
+(* VDF(m) is not enough because ill-behaved players could for example pre-compute *)
+(* VDF evaluations in one round to later use them in the next round in order to   *)
+(* overwhelm the well-behaved players.                                            *)
+(*                                                                                *)
+(* To prevent this, we additionally require that each message include a set of    *)
+(* (valid) messages from the previous round and that this set be big enough to    *)
+(* ensure that it includes at least one message from a well-behaved player. This  *)
+(* ensures that ill-behaved players cannot pre-compute VDF outputs. The trick is  *)
+(* to figure out how to ensure that a set of messages contains at least one       *)
+(* message from a well-behaved player. This is what the algorithm below does.     *)
+(**********************************************************************************)
 
 EXTENDS Integers, FiniteSets
 
@@ -36,9 +36,12 @@ CONSTANTS
         msgs[round] := [p \in P |-> msgs[round][p] \cup {m}];
     }
     define {
-        ValidSet(msgs, recvd) == \* whether msgs is a valid set of msgs given we received rcvd
+        \* if the following is true (where it's used below),
+        \* then we know that msgs contains a message from a well-behaved player
+        ValidSet(msgs, recvd) ==
             \* msgs is a set of messages from the previous round
             \* recvd is what we received in the current round
+            \* in short: there is a majority among msgs that is a majority of a majority among recvd
             \E S \in SUBSET msgs :
                 /\ 2*Cardinality(S) > Cardinality(msgs)
                 /\ \E R \in SUBSET recvd :
@@ -46,7 +49,6 @@ CONSTANTS
                     /\ \A r \in R : 
                         /\ S \subseteq r[2] \* r[2] is the set of messages attached to r
                         /\ 2*Cardinality(S) > Cardinality(r[2])
-        \* in short: there is a majority among msgs that is a majority of a majority among recvd
     }
     process (proc \in P) 
         variables
@@ -55,7 +57,8 @@ CONSTANTS
 l0:     SendAll(<<self>>);
         done[self] := 0; \* done for round 0
 l1:     await round = 1;
-        \* now deliver for round 0; we can deliver everything since the adversary cannot precompute VDF outputs before round 0
+        \* now deliver for round 0
+        \* we can deliver everything since the adversary cannot precompute VDF outputs before round 0
         delivered[0] := msgs[0][self];
         SendAll(<<self, delivered[0]>>); \* we attach all the delivered messages
         done[self] := 1; \* done for round 1
