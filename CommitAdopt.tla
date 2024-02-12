@@ -99,8 +99,9 @@ r3:     await rnd = 3; \* in round 3 we just produce an output
         else if (MostVotedFor(self) # {}) \* otherwise, adopt a most voted value:
             with (v \in MostVotedFor(self)) \* there can be multiple values in the set
             output[self] := <<"adopt", v>>
-        else \* if no value was voted for, adopt input:
-            output[self] := <<"adopt", input[self]>>
+        else \* if no value was voted for, adopt an arbitrary value:
+            with (v \in V)
+            output[self] := <<"adopt", v>>
     }
     (******************************************************************************)
     (* Below we specify the behavior of the adversary.  The no-equivocation model *)
@@ -119,6 +120,116 @@ adv:    while (rnd < 3) {
     }
 }
 *)
+\* BEGIN TRANSLATION (chksum(pcal) = "882cc78d" /\ chksum(tla) = "2a1f3d3d")
+VARIABLES input, sent, received, rnd, output, pc
+
+(* define statement *)
+TypeOkay ==
+    /\ input \in [P -> V]
+    /\ sent \in [P -> V\cup {Bot,NoCommit}]
+    /\ received \in [P -> [P -> V\cup {Bot, NoCommit, Lambda}]]
+    /\ rnd \in {1,2,3}
+    /\ output \in [P -> {Bot} \cup {<<ca,v>> : ca \in {"commit", "adopt"}, v \in V}]
+
+HeardOf(p) == {q \in P : received[p][q] # Bot}
+
+Minority(S) == {M \in SUBSET S : 2*Cardinality(M)<Cardinality(S)}
+
+VoteCount(p, v) == Cardinality({q \in P : received[p][q] = v})
+
+VotedByMajority(p) == {v \in V : 2*VoteCount(p, v) > Cardinality(HeardOf(p))}
+
+MostVotedFor(p) == {v \in V : \A w \in V \ {v} : VoteCount(p, v) > VoteCount(p, w)}
+
+Pc(r) == CASE r = 1 -> "r1"
+        [] r = 2 -> "r2"
+        [] r = 3 -> "r3"
+
+Agreement == \A p,q \in P : output[p] # Bot /\ output[q] # Bot /\ output[p][1] = "commit"
+    => output[p][2] = output[q][2]
+Validity == \A p \in P : \A v \in V :
+    pc[p] = "Done" /\ (\A q \in P : input[q] = v) => output[p] = <<"commit", v>>
+
+
+vars == << input, sent, received, rnd, output, pc >>
+
+ProcSet == (P) \cup ({"adversary"})
+
+Init == (* Global variables *)
+        /\ input \in [P -> V]
+        /\ sent = [p \in P |-> Bot]
+        /\ received = [p \in P |-> [q \in P |-> Bot]]
+        /\ rnd = 1
+        /\ output = [p \in P |-> Bot]
+        /\ pc = [self \in ProcSet |-> CASE self \in P -> "r1"
+                                        [] self \in {"adversary"} -> "adv"]
+
+r1(self) == /\ pc[self] = "r1"
+            /\ sent' = [sent EXCEPT ![self] = (input[self])]
+            /\ pc' = [pc EXCEPT ![self] = "r2"]
+            /\ UNCHANGED << input, received, rnd, output >>
+
+r2(self) == /\ pc[self] = "r2"
+            /\ rnd = 2
+            /\ IF VotedByMajority(self) # {}
+                  THEN /\ \E v \in VotedByMajority(self):
+                            sent' = [sent EXCEPT ![self] = v]
+                  ELSE /\ sent' = [sent EXCEPT ![self] = NoCommit]
+            /\ pc' = [pc EXCEPT ![self] = "r3"]
+            /\ UNCHANGED << input, received, rnd, output >>
+
+r3(self) == /\ pc[self] = "r3"
+            /\ rnd = 3
+            /\ IF VotedByMajority(self) # {}
+                  THEN /\ \E v \in VotedByMajority(self):
+                            output' = [output EXCEPT ![self] = <<"commit", v>>]
+                  ELSE /\ IF MostVotedFor(self) # {}
+                             THEN /\ \E v \in MostVotedFor(self):
+                                       output' = [output EXCEPT ![self] = <<"adopt", v>>]
+                             ELSE /\ \E v \in V:
+                                       output' = [output EXCEPT ![self] = <<"adopt", v>>]
+            /\ pc' = [pc EXCEPT ![self] = "Done"]
+            /\ UNCHANGED << input, sent, received, rnd >>
+
+proc(self) == r1(self) \/ r2(self) \/ r3(self)
+
+adv(self) == /\ pc[self] = "adv"
+             /\ IF rnd < 3
+                   THEN /\ \A p \in P : pc[p] = Pc(rnd+1)
+                        /\ \E Participating \in SUBSET P \ {{}}:
+                             \E Corrupted \in Minority(Participating):
+                               \E ByzMsg \in [P -> [Corrupted -> V\cup {Bot, Lambda, NoCommit}]]:
+                                 /\ \A p1,p2 \in P : \A q \in Corrupted :
+                                       ByzMsg[p1][q] \in V => ByzMsg[p2][q] \in {ByzMsg[p1][q], Lambda}
+                                 /\ received' =         [p \in P |-> [q \in P |->
+                                                IF q \in Corrupted
+                                                THEN ByzMsg[p][q]
+                                                ELSE IF q \in Participating
+                                                    THEN sent[q]
+                                                    ELSE Bot]]
+                        /\ rnd' = rnd+1
+                        /\ pc' = [pc EXCEPT ![self] = "adv"]
+                   ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
+                        /\ UNCHANGED << received, rnd >>
+             /\ UNCHANGED << input, sent, output >>
+
+adversary(self) == adv(self)
+
+(* Allow infinite stuttering to prevent deadlock on termination. *)
+Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
+               /\ UNCHANGED vars
+
+Next == (\E self \in P: proc(self))
+           \/ (\E self \in {"adversary"}: adversary(self))
+           \/ Terminating
+
+Spec == /\ Init /\ [][Next]_vars
+        /\ \A self \in P : WF_vars(proc(self))
+        /\ \A self \in {"adversary"} : WF_vars(adversary(self))
+
+Termination == <>(\A self \in ProcSet: pc[self] = "Done")
+
+\* END TRANSLATION 
 
 \* Canary invariants that should break (this is to make sure that the specification reaches expected states):
 \* To find a state in which some process outputs:
