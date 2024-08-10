@@ -26,5 +26,5 @@ this file.
 # Mechanically-checked proofs in Isabelle/HOL
 
 We formalize the no-equivocation model in Isabelle/HOL and we prove the main lemma justifying the correctness of the commit-adopt algorithm.
-You can browse the proof at [`DynamicConsensus/browser_info/DynamicConsensus.html`](https://htmlpreview.github.io/?https://raw.githubusercontent.com/nano-o/dynamic-participation-supplemental/isabelle-proofs/DynamicConsensus/browser_info/DynamicConsensus.html).
+You can browse the proof at [`DynamicConsensus/browser_info/document.pdf`](DynamicConsensus/browser_info/document.pdf) or [`DynamicConsensus/browser_info/DynamicConsensus.html`](https://htmlpreview.github.io/?https://raw.githubusercontent.com/nano-o/dynamic-participation-supplemental/isabelle-proofs/DynamicConsensus/browser_info/DynamicConsensus.html).
 The actual theory file (which must be opened using [Isabelle](https://isabelle.in.tum.de/)) is [`DynamicConsensus/DynamicConsensus.thy`](DynamicConsensus/DynamicConsensus.thy)
